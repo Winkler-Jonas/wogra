@@ -1,6 +1,6 @@
 import gitlab
 import regex as re
-from typing import List, Dict, Callable
+from typing import List, Dict, Callable, Tuple, Any
 from datetime import date, datetime, timedelta
 from collections import defaultdict
 
@@ -29,6 +29,7 @@ repo_pattern = re.compile("""
 # ?P<url>.*?)\'.*?last_activity_at(?P=spacing)\'(?P<date>\d{4}-\d{2}-\d{2})", flags=re.M | re.S)
 # repo_user = re.compile(r'\'owner\'.+?\'username\':\s\'(?P<usr>[a-z]+)', flags=re.M | re.S)
 port_pattern = re.compile(r'(?=:(?P<port>\d+))', flags=re.M | re.S)
+server_pattern = re.compile(r'\@(?P<server>.*?)\:', flags=re.M | re.S)
 
 url_wogra: str = 'https://gitlab.wogra.com'
 p_token_wogra: str = 'Lq1z1hMxG_yKeyTLaAXD'
@@ -55,7 +56,7 @@ def __get_project_list(url: str, token: str) -> list:
             pass
 
 
-def __get_project_info(proj_list: list, date_y_m_d: date) -> defaultdict[str, Dict[str, str]]:
+def __get_project_info(proj_list: list, date_y_m_d: date) -> tuple[str, str, defaultdict[Any, dict]]:
     """
     Convert list of projects into strings and filter out
     projects that were not edited in the provided timeframe
@@ -64,8 +65,9 @@ def __get_project_info(proj_list: list, date_y_m_d: date) -> defaultdict[str, Di
     :type date_y_m_d: date
     :param proj_list: The list of projects on the server
     :type proj_list: list
-    :return: List of remaining urls / repositories
-    :rtype: List[str]
+    :return: The server-address, the ssh-port of the server and a dictionary
+    containing relevant information about the repo
+    :rtype: tuple[str, str, defaultdict[Any, dict]]
     """
     repository_dict: [Callable, dict] = defaultdict(lambda: dict())
     for proj in proj_list:
@@ -75,15 +77,15 @@ def __get_project_info(proj_list: list, date_y_m_d: date) -> defaultdict[str, Di
                 datetime.strptime(f"{repo_last_edit}", "%Y-%m-%d") > date_y_m_d:
 
             repo_id, repo_name, repo_url = repo_info.group('id', 'name', 'url')
-            repo_port: str = '' if not (tmp := port_pattern.search(repo_url)) else tmp.group('port')
             repository_dict[repo_id] = {'repo_name': repo_name,
                                         'repo_url': repo_url,
-                                        'repo_last_edit': repo_last_edit,
-                                        'repo_port': repo_port}
+                                        'repo_last_edit': repo_last_edit}
         else:
             # should raise exception due to empty repository
             pass
-    return repository_dict
+    return '' if not (s_tmp := server_pattern.search(repo_url)) else s_tmp.group('server'), \
+           '' if not (tmp := port_pattern.search(repo_url)) else tmp.group('port'), \
+           repository_dict
 
 
 def __convert_date(time_in_days: int = None) -> date:
@@ -106,7 +108,7 @@ def __convert_date(time_in_days: int = None) -> date:
     return date_y_m_d
 
 
-def get_gitlab_info(url: str, private_token: str, time_in_days: int = None):
+def get_gitlab_info(url: str, private_token: str, time_in_days: int = None) -> tuple[str, str, defaultdict[Any, dict]]:
     """
     Get repository urls edited in either provided time-frame or by default from
     the last month
@@ -120,10 +122,7 @@ def get_gitlab_info(url: str, private_token: str, time_in_days: int = None):
     :return: None
     :rtype: None
     """
-    repo_server = __get_project_info(__get_project_list(url, private_token), __convert_date(time_in_days))
-    for key, value in repo_server.items():
-        print(key, value)
-
+    return __get_project_info(__get_project_list(url, private_token), __convert_date(time_in_days))
 
 if __name__ == '__main__':
     get_gitlab_info(url=url_hsa, private_token=p_token_hsa, time_in_days=100)
