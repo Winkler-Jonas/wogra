@@ -1,19 +1,25 @@
-from typing import Dict, Tuple, List
+import logging
+import os
+from typing import Dict, List
 
 import sh
 import platform
 import regex as re
+import logging as log
 from pathlib import Path
 import multiprocessing as mp
 from collections import defaultdict
 from collections.abc import Callable
 from subprocess import run, CalledProcessError
-from main import get_gitlab_info
+from main import get_gitlab_info, convert_date
 
 url_hsa: str = 'https://r-n-d.informatik.hs-augsburg.de:8080/'
 p_token_hsa: str = 'bsrg4w9xqTxotvxzVLGD'
+url_wogra: str = 'https://gitlab.wogra.com'
+p_token_wogra: str = 'Lq1z1hMxG_yKeyTLaAXD'
 
 TMP_REPO_FOLDER: str = 'tmp_repo'
+log.basicConfig(filename='basic.log', level=log.INFO)
 
 
 def prep_clean(directory: Path = Path.cwd() / TMP_REPO_FOLDER):
@@ -59,14 +65,14 @@ def add_ssh_keys(server_ip: str, ssh_port: str) -> bool:
         ssh_file: Path = Path.home() / '.ssh' / 'known_hosts' if \
             re.search('linux', platform.system(), re.I) else \
             Path.home() / '%USERPROFILE%' / '.ssh'
-        output = run(['ssh-keyscan', '-H', f'-p {ssh_port}', f'{server_ip}'], capture_output=True, text=True, check=True)
-        ssh_fingerprint = re.search(r'stdout=\'(?P<fingerprint>.+?)\\n\'', str(output), flags=re.S | re.M)
-        # todo check if fingerprint already in file
-        with ssh_file.open(mode='a') as file:
-            file.write(ssh_fingerprint.group('fingerprint'))
+        keyscan_output = run(['ssh-keyscan', '-H', f'-p {ssh_port}', '-t', 'rsa,ecdsa,ed25519', f'{server_ip}'], capture_output=True, text=True, check=True)
+        ssh_fingerprint = re.search(r'stdout=\'(?P<fingerprint>.+?)\\n\'\,\sstderr=', str(keyscan_output), flags=re.S | re.M)
+        with ssh_file.open(mode='w') as file:
+            file.write(re.sub(r'(?P<false_line_sep>\\n)', os.linesep, ssh_fingerprint.group('fingerprint'), re.MULTILINE))
         return True
     except CalledProcessError as ce:
         # ssh-keyscan could not be executed
+        log.error('Error occurred while trying to get ssh-fingerprints')
         raise ce
     except FileNotFoundError as fe:
         # the file specifies was not found (not sure if windows actually works)
@@ -76,21 +82,18 @@ def add_ssh_keys(server_ip: str, ssh_port: str) -> bool:
         raise at
 
 
-def clone_repo(url: str, directory: Path):
-    pass
-
-
 def dl_repo(repo_url: List[str]):
     sh.git('clone', repo_url[1], tmp_path := Path.cwd() / TMP_REPO_FOLDER / repo_url[0])
-    print(f'Cloning {repo_url[1]} to {tmp_path}')
+    log.info(f'Cloning {repo_url[1]} to {tmp_path}')
 
 
-def run_function(repo_server: str, ssh_port: str, repo_dict: defaultdict[str, Dict[str, str]], user_name: str, time_frame: str = None):
+def run_function(repo_server: str, ssh_port: str, repo_dict: defaultdict[str, Dict[str, str]], author_name: str, time_frame: int = None):
     """
     Function needed to build the whole process
 
     - Cleanup / Prep folder if necessary
-    - Clone repos todo posix (folder to be called like repo)
+    - add ssh fingerprints to known_hosts file
+    - Clone repos
     - Search for entries of user in given timeframe (usually from the 1st of the month till execution date)
     - Collect data
     - Return data / Or store it in a db ?!?
@@ -98,21 +101,36 @@ def run_function(repo_server: str, ssh_port: str, repo_dict: defaultdict[str, Di
     pool = mp.Pool(mp.cpu_count())
     try:
         prep_clean()
-        # [dl_repo([key, value['repo_url']]) for key, value in repo_dict.items()]
+        add_ssh_keys(server_ip=repo_server, ssh_port=ssh_port)
+        # Single-Core (10xslower) [dl_repo([key, value['repo_url']]) for key, value in repo_dict.items()]
         pool.map(dl_repo, [[key, value['repo_url']] for key, value in repo_dict.items()])
+        for folder in (Path.cwd() / TMP_REPO_FOLDER).iterdir():
+            try:
+                git = sh.git.bake('--no-pager', _cwd=f'{folder.resolve()}')
+                git('log',
+                    f'--after={convert_date(time_frame).date()}T00:00:00',
+                    f'--author={author_name}',
+                    '--pretty=format:%an;%ai;%s;%b'
+                    )
 
-    except ValueError as e:
+            except sh.ErrorReturnCode_128 as e:
+                log.info(e.msg)
+                print('shouldnt be here')
+                raise e
+                #continue
+    except sh.ErrorReturnCode as e:
+        # occurs when there is no commit fitting the provided filters
+        print('not good')
         pass
     finally:
         prep_clean()
 
 
 if __name__ == '__main__':
-
-    run_function(*get_gitlab_info(url=url_hsa, private_token=p_token_hsa, time_in_days=100), user_name='olaf')
-    # add_ssh_keys(server_ip='r-n-d.informatik.hs-augsburg.de', ssh_port='2222')
-    # clear_folder(Path.cwd() / 'TMP')
-    # sh.git('clone', 'ssh://git@r-n-d.informatik.hs-augsburg.de:2222/dva/berichte-2020/53.git', 'TMP/')
-
-    # execute command in background
-    # p = sleep(3, _bg=True)
+    time_frame: int = 2
+    user: str = 'wgrasshof'
+    run_function(*get_gitlab_info(url=url_wogra,
+                                  private_token=p_token_wogra,
+                                  time_in_days=time_frame),
+                 author_name=user,
+                 time_frame=time_frame)

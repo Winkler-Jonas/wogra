@@ -88,7 +88,7 @@ def __get_project_info(proj_list: list, date_y_m_d: date) -> tuple[str, str, def
            repository_dict
 
 
-def __convert_date(time_in_days: int = None) -> date:
+def convert_date(time_in_days: int = None) -> datetime:
     """
     Used to determine which time to use for data retrieval.
 
@@ -122,7 +122,7 @@ def get_gitlab_info(url: str, private_token: str, time_in_days: int = None) -> t
     :return: None
     :rtype: None
     """
-    return __get_project_info(__get_project_list(url, private_token), __convert_date(time_in_days))
+    return __get_project_info(__get_project_list(url, private_token), convert_date(time_in_days))
 
 if __name__ == '__main__':
     get_gitlab_info(url=url_hsa, private_token=p_token_hsa, time_in_days=100)
