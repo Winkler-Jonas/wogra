@@ -1,13 +1,11 @@
-import logging
 import os
-from typing import Dict, List
-
 import sh
 import platform
 import regex as re
 import logging as log
 from pathlib import Path
 import multiprocessing as mp
+from typing import Dict, List
 from collections import defaultdict
 from collections.abc import Callable
 from subprocess import run, CalledProcessError
@@ -83,6 +81,12 @@ def add_ssh_keys(server_ip: str, ssh_port: str) -> bool:
 
 
 def dl_repo(repo_url: List[str]):
+    """
+    Download a repository to the defined folder
+
+    :param repo_url: The UID of the repository and its url
+    :type repo_url: List[str]
+    """
     sh.git('clone', repo_url[1], tmp_path := Path.cwd() / TMP_REPO_FOLDER / repo_url[0])
     log.info(f'Cloning {repo_url[1]} to {tmp_path}')
 
@@ -97,6 +101,7 @@ def run_function(repo_server: str, ssh_port: str, repo_dict: defaultdict[str, Di
     - Search for entries of user in given timeframe (usually from the 1st of the month till execution date)
     - Collect data
     - Return data / Or store it in a db ?!?
+    todo des sollte noch bissl besser verteilt werden, so dass es Sinn macht...
     """
     pool = mp.Pool(mp.cpu_count())
     try:
@@ -107,19 +112,21 @@ def run_function(repo_server: str, ssh_port: str, repo_dict: defaultdict[str, Di
         for folder in (Path.cwd() / TMP_REPO_FOLDER).iterdir():
             try:
                 git = sh.git.bake('--no-pager', _cwd=f'{folder.resolve()}')
-                git('log',
-                    f'--after={convert_date(time_frame).date()}T00:00:00',
-                    f'--author={author_name}',
-                    '--pretty=format:%an;%ai;%s;%b'
-                    )
-
-            except sh.ErrorReturnCode_128 as e:
-                log.info(e.msg)
-                print('shouldnt be here')
+                log.info(commit_msg := git('log',
+                                           f'--after={convert_date(time_frame).date()}T00:00:00',
+                                           f'--author={author_name}',
+                                           '--pretty=format:%an;%ai;%s;%b'
+                                           ))
+                print(commit_msg)
+            except sh.ErrorReturnCode as e:
+                if 'ErrorReturnCode_128' == e.__class__.__name__:
+                    # Error occurs when no commit on branch *IGNORE*
+                    continue
+                print('should not be here')
                 raise e
-                #continue
     except sh.ErrorReturnCode as e:
         # occurs when there is no commit fitting the provided filters
+        log.error(e.stderr)
         print('not good')
         pass
     finally:
@@ -127,10 +134,10 @@ def run_function(repo_server: str, ssh_port: str, repo_dict: defaultdict[str, Di
 
 
 if __name__ == '__main__':
-    time_frame: int = 2
-    user: str = 'wgrasshof'
-    run_function(*get_gitlab_info(url=url_wogra,
-                                  private_token=p_token_wogra,
+    time_frame: int = 100
+    user: str = 'Huber Hoegl'
+    run_function(*get_gitlab_info(url=url_hsa,
+                                  private_token=p_token_hsa,
                                   time_in_days=time_frame),
                  author_name=user,
                  time_frame=time_frame)
