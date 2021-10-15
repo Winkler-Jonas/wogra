@@ -195,8 +195,7 @@ def run_function(repo_server: str, ssh_port: str, repo_dict: defaultdict[str, Di
         print('not good')
         raise e
     finally:
-        pass
-        # prep_clean()
+        prep_clean()
 
 
 if __name__ == '__main__':
