@@ -6,10 +6,55 @@ import logging as log
 from pathlib import Path
 import multiprocessing as mp
 from typing import Dict, List
+from dataclasses import dataclass, field
 from collections import defaultdict
 from collections.abc import Callable
-from subprocess import run, CalledProcessError
 from main import get_gitlab_info, convert_date
+from subprocess import run, CalledProcessError, Popen, PIPE
+
+
+class CommandException(Exception):
+    def __init__(self, errno: int, msg: str):
+        self._msg: str = msg
+        self._errno: int = errno
+        super(CommandException, self).__init__('msg: {}, errno: {}'.format(msg, errno))
+
+    def __reduce__(self):
+        return CommandException, (self._msg, self._errno)
+
+    @property
+    def msg(self) -> str:
+        return self._msg
+
+    @property
+    def errno(self) -> int:
+        return self._errno
+
+
+@dataclass
+class POutput:
+    stdout: str
+    stderr: str
+
+    _stdout: str = field(init=False, repr=False)
+    _stderr: str = field(init=False, repr=False)
+
+    @property
+    def stdout(self) -> str:
+        return self._stdout
+
+    @stdout.setter
+    def stdout(self, stdout: bytes) -> None:
+        self._stdout = ''.join(map(chr, stdout))
+
+    @property
+    def stderr(self) -> str:
+        return self._stderr
+
+    @stderr.setter
+    def stderr(self, stderr: bytes) -> None:
+        self._stderr = ''.join(map(chr, stderr))
+
 
 url_hsa: str = 'https://r-n-d.informatik.hs-augsburg.de:8080/'
 p_token_hsa: str = 'bsrg4w9xqTxotvxzVLGD'
@@ -17,7 +62,7 @@ url_wogra: str = 'https://gitlab.wogra.com'
 p_token_wogra: str = 'Lq1z1hMxG_yKeyTLaAXD'
 
 TMP_REPO_FOLDER: str = 'tmp_repo'
-log.basicConfig(filename='basic.log', level=log.INFO)
+log.basicConfig(filename='basic.log', level=log.WARNING)
 
 
 def prep_clean(directory: Path = Path.cwd() / TMP_REPO_FOLDER):
@@ -87,8 +132,34 @@ def dl_repo(repo_url: List[str]):
     :param repo_url: The UID of the repository and its url
     :type repo_url: List[str]
     """
-    sh.git('clone', repo_url[1], tmp_path := Path.cwd() / TMP_REPO_FOLDER / repo_url[0])
-    log.info(f'Cloning {repo_url[1]} to {tmp_path}')
+    sh.git('clone', repo_url[1], Path.cwd() / TMP_REPO_FOLDER / repo_url[0])
+
+
+# Done
+def git_run(cmd: List[str], cwd: Path = None) -> POutput:
+    """
+    Execute a git command (could also be used to execute any shell command)
+
+    :raises CommandException: if the command proved could not be executed
+
+    :param cmd: The command to be executed
+    :type cmd: List[str]
+    :param cwd: The directory the command ought to be executed from
+    :type cwd: Path
+    :return: Dataclass containing commands stdout- and stderr-mgs
+    :rtype: POutput
+    """
+    try:
+        if cwd:
+            p_git = Popen(cmd, stderr=PIPE, stdout=PIPE, cwd=str(cwd.resolve()))
+        else:
+            # Git commands like "clone" have cwd built in
+            p_git = Popen(cmd, stderr=PIPE, stdout=PIPE)
+    except FileNotFoundError as e:
+        err_msg, err_no = f'Command was not found / Sys-Error-msg: {e.strerror}', 1
+        log.error(f'{err_no}: {err_msg}')
+        raise CommandException(err_no, err_msg)
+    return POutput(*p_git.communicate())
 
 
 def run_function(repo_server: str, ssh_port: str, repo_dict: defaultdict[str, Dict[str, str]], author_name: str, time_frame: int = None):
@@ -106,36 +177,31 @@ def run_function(repo_server: str, ssh_port: str, repo_dict: defaultdict[str, Di
     pool = mp.Pool(mp.cpu_count())
     try:
         prep_clean()
+        repo_folder: Path = Path.cwd() / TMP_REPO_FOLDER
         add_ssh_keys(server_ip=repo_server, ssh_port=ssh_port)
         # Single-Core (10xslower) [dl_repo([key, value['repo_url']]) for key, value in repo_dict.items()]
-        pool.map(dl_repo, [[key, value['repo_url']] for key, value in repo_dict.items()])
-        for folder in (Path.cwd() / TMP_REPO_FOLDER).iterdir():
-            try:
-                git = sh.git.bake('--no-pager', _cwd=f'{folder.resolve()}')
-                log.info(commit_msg := git('log',
-                                           f'--after={convert_date(time_frame).date()}T00:00:00',
-                                           f'--author={author_name}',
-                                           '--pretty=format:%an;%ai;%s;%b'
-                                           ))
-                print(commit_msg)
-            except sh.ErrorReturnCode as e:
-                if 'ErrorReturnCode_128' == e.__class__.__name__:
-                    # Error occurs when no commit on branch *IGNORE*
-                    continue
-                print('should not be here')
-                raise e
+        pool.map(git_run, [['git', 'clone', f'{value["repo_url"]}', f'{str((repo_folder / key).resolve())}']
+                           for key, value in repo_dict.items()])
+        for folder in repo_folder.iterdir():
+            cmd_git_log: List[str] = ['git', 'log',
+                                      f'--after={convert_date(time_frame).date()}T00:00:00',
+                                      f'--author={author_name}',
+                                      '--pretty=format:"%an;%ai;%s;%b"']
+            git_log_out: POutput = git_run(cmd_git_log, cwd=folder)
+
     except sh.ErrorReturnCode as e:
         # occurs when there is no commit fitting the provided filters
         log.error(e.stderr)
         print('not good')
-        pass
+        raise e
     finally:
-        prep_clean()
+        pass
+        # prep_clean()
 
 
 if __name__ == '__main__':
-    time_frame: int = 100
-    user: str = 'Huber Hoegl'
+    time_frame: int = 20
+    user: str = 'Hubert Hoegl'
     run_function(*get_gitlab_info(url=url_hsa,
                                   private_token=p_token_hsa,
                                   time_in_days=time_frame),
