@@ -36,28 +36,36 @@ class RegexException(Exception):
 
 
 repo_pattern = re.compile("""
-    id                              
-    \W+                             # tag and value seperated by none 'norm' characters
-        (?P<id>                    
-            \d+?                    # capture id consisting of one or more numbers
-        )                           
-    \,.*?name\W+
-        (?P<name>                   
-            [\w\-\s]+?              # capture name consisting of [a-zA-Z_- and spacing] 
-        )\'                         # non-greedy ends with apostrophe
-    .*?ssh_url_to_repo\W+
-        (?P<url>                    
-            .*?                     # capture url non-greedy 
-        )                           
-    \'.*?last_activity_at\W+        # group capture ends with apostrophe
-        (?P<date>                   
-            \d{4}-\d{2}-\d{2}       # capture date format YYYY-MM-DD
-        )                           
-    """, flags=re.M | re.S | re.VERBOSE)
+            id                              
+            \W+                             # tag and value seperated by none 'norm' characters
+                (?P<id>                    
+                    \d+?                    # capture id consisting of one or more numbers
+                )                           
+            \,.*?name\W+
+                (?P<name>                   
+                    [\w\-\s]+?              # capture name consisting of [a-zA-Z_- and spacing] 
+                )\'                         # non-greedy ends with apostrophe
+            .*?ssh_url_to_repo\W+
+                (?P<url>                    
+                    .*?                     # capture url non-greedy 
+                )                           
+            \'.*?last_activity_at\W+        # group capture ends with apostrophe
+                (?P<date>                   
+                    \d{4}-\d{2}-\d{2}       # capture date format YYYY-MM-DD
+                )                           
+            """, flags=re.M | re.S | re.VERBOSE)
 
-port_pattern = re.compile(r'(?=:(?P<port>\d+))', flags=re.M | re.S)
-server_pattern = re.compile(r'\@(?P<server>.*?)\:', flags=re.M | re.S)
-server_port_pattern = re.compile(r'\@(?P<server>.*)(?=:(?P<port>\d+))', flags=re.M | re.S)
+server_port_pattern = re.compile("""
+            \@                   
+                (?P<server>          
+                    .*                  # capture anything greedy from @ to : 
+                )                    
+                    (?=:                # look ahead for :
+                (?P<port>            
+                    \d+                 # any digit greedy
+                )                    
+            )                   
+            """, flags=re.M | re.S | re.VERBOSE)
 
 url_wogra: str = 'https://gitlab.wogra.com'
 p_token_wogra: str = 'Lq1z1hMxG_yKeyTLaAXD'
@@ -105,10 +113,10 @@ def __get_project_info(proj_list: list, date_y_m_d: datetime) -> tuple[str, str,
         datetime(year=date_y_m_d.year, month=date_y_m_d.month, day=date_y_m_d.day, hour=date_y_m_d.hour)
         if not proj_list:
             raise IndexError
-    except ValueError as val_err: # Date not allowed
+    except ValueError as val_err:  # Date not allowed
         log.error(f'Error occurred! Illegal timestamp: {date_y_m_d}')
         raise AttributeError()
-    except IndexError as idx_err:
+    except IndexError as idx_err:  # Project-list empty
         log.error(f'Error occurred! Provided gitlab-project-list empty')
         raise AttributeError()
 
@@ -133,9 +141,9 @@ def __get_project_info(proj_list: list, date_y_m_d: datetime) -> tuple[str, str,
         log.error(err_msg)
         raise RegexException(-10, err_msg)
     except IndexError:
-        err_msg: str = f'Exception occurred! Provided string did not match any internal search pattern' \
+        exc_msg: str = f'Exception occurred! Provided string did not match any internal search pattern' \
                        f'Please provided string containing ID/Name/URL..'
-        log.exception(err_msg)
+        log.exception(exc_msg)
         exit(0)
     return server, port, repository_lst
 
