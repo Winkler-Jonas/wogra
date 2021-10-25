@@ -4,30 +4,26 @@ from typing import List, Dict, Callable, Tuple, Any
 from datetime import date, datetime, timedelta
 from collections import defaultdict
 
-repo_pattern = re.compile("""
-    \'id                            # Each object starts with id
-    (?P<spacing>\':\s)              # Helper group for repeacing pattern
-    (?P<id>                         # Group ID 
-        \d+?)                       # Consists of multiple digits
-    ,.*?                            # Seperator
-    name(?P=spacing)\'              # Static string with repeating spacing group
-    (?P<name>                       # Start name group
-        [\w-]+?)                    # Match words/digits/dashes and underscores
-    \'.*?                           # Seperator
-    ssh_url_to_repo(?P=spacing)\'   # Static string with repeating spacing group
-    (?P<url>                        # Start url group
-        .*?)\'                      # Match anything till appearance of Apostrophe
-    .*?                             # Seperator
-    last_activity_at(?P=spacing)\'  # Static string with repeating spacing group
-    (?P<date>                       # Start group date
-        \d{4}-                      # Match 4 digits followed by a dash
-        \d{2}-                      # Match 2 digits followed by a dash
-        \d{2})                      # Match 2 digits followed by a dash
+repo_pattern = re.compile(r"""
+    id                              
+    \W+                             # tag and value seperated by none 'norm' characters
+        (?P<id>                    
+            \d+?                    # capture id consisting of one or more numbers
+        )                           
+    \,.*?name\W+
+        (?P<name>                   
+            [\w\-\s]+?              # capture name consisting of [a-zA-Z_- and spacing] 
+        )\'                         # non-greedy ends with apostrophe
+    .*?ssh_url_to_repo\W+
+        (?P<url>                    
+            .*?                     # capture url non-greedy 
+        )                           
+    \'.*?last_activity_at\W+        # group capture ends with apostrophe
+        (?P<date>                   
+            \d{4}-\d{2}-\d{2}       # capture date format YYYY-MM-DD
+        )                           
     """, flags=re.M | re.S | re.VERBOSE)
 
-# r"\'id(?P<spacing>\':\s)(?P<id>\d+?),.*?name(?P=spacing)\'(?P<name>[\w-]+?)\'.*?ssh_url_to_repo(?P=spacing)\'(
-# ?P<url>.*?)\'.*?last_activity_at(?P=spacing)\'(?P<date>\d{4}-\d{2}-\d{2})", flags=re.M | re.S)
-# repo_user = re.compile(r'\'owner\'.+?\'username\':\s\'(?P<usr>[a-z]+)', flags=re.M | re.S)
 port_pattern = re.compile(r'(?=:(?P<port>\d+))', flags=re.M | re.S)
 server_pattern = re.compile(r'\@(?P<server>.*?)\:', flags=re.M | re.S)
 
@@ -71,17 +67,21 @@ def __get_project_info(proj_list: list, date_y_m_d: date) -> tuple[str, str, def
     """
     repository_dict: [Callable, dict] = defaultdict(lambda: dict())
     for proj in proj_list:
-        if (proj_string := str(proj)) and \
-                (repo_info := repo_pattern.search(proj_string)) and \
-                (repo_last_edit := repo_info.group('date')) and \
-                datetime.strptime(f"{repo_last_edit}", "%Y-%m-%d") > date_y_m_d:
-
-            repo_id, repo_name, repo_url = repo_info.group('id', 'name', 'url')
-            repository_dict[repo_id] = {'repo_name': repo_name,
-                                        'repo_url': repo_url,
-                                        'repo_last_edit': repo_last_edit}
-        else:
-            # should raise exception due to empty repository
+        try:
+            if (proj_string := str(proj)) and \
+                    (repo_info := repo_pattern.search(proj_string)) and \
+                    (repo_last_edit := repo_info.group('date')) and \
+                    datetime.strptime(f"{repo_last_edit}", "%Y-%m-%d") > date_y_m_d:
+                repo_id, repo_name, repo_url = repo_info.group('id', 'name', 'url')
+                repository_dict[repo_id] = {'repo_name': repo_name,
+                                            'repo_url': repo_url,
+                                            'repo_last_edit': repo_last_edit}
+            else:
+                # should raise exception due to empty repository
+                pass
+        except AttributeError as e:
+            # todo write exception if clause above should be removed
+            # Exception is thrown when regex group was not found ...
             pass
     return '' if not (s_tmp := server_pattern.search(repo_url)) else s_tmp.group('server'), \
            '' if not (tmp := port_pattern.search(repo_url)) else tmp.group('port'), \

@@ -184,10 +184,13 @@ def run_function(repo_server: str, ssh_port: str, repo_dict: defaultdict[str, Di
                            for key, value in repo_dict.items()])
         for folder in repo_folder.iterdir():
             cmd_git_log: List[str] = ['git', 'log',
+                                      '-i',
                                       f'--after={convert_date(time_frame).date()}T00:00:00',
                                       f'--author={author_name}',
                                       '--pretty=format:"%an;%ai;%s;%b"']
             git_log_out: POutput = git_run(cmd_git_log, cwd=folder)
+            print(git_log_out)
+            # todo read stderr from git_log_out POutput-Object
 
     except sh.ErrorReturnCode as e:
         # occurs when there is no commit fitting the provided filters
@@ -195,14 +198,25 @@ def run_function(repo_server: str, ssh_port: str, repo_dict: defaultdict[str, Di
         print('not good')
         raise e
     finally:
+        print('Done')
         prep_clean()
 
 
 if __name__ == '__main__':
-    time_frame: int = 20
-    user: str = 'Hubert Hoegl'
-    run_function(*get_gitlab_info(url=url_hsa,
-                                  private_token=p_token_hsa,
+    time_frame: int = 3
+    user: str = 'Renovate Bot'
+    run_function(*get_gitlab_info(url=url_wogra,
+                                  private_token=p_token_wogra,
                                   time_in_days=time_frame),
                  author_name=user,
                  time_frame=time_frame)
+
+
+# Grobgliederung fertig machen
+# Einleitung fertigstellen
+# Gab es überhaupt ausfälle / wenn ja, wie lange? / Unter 5 minuten rauswerfen / Speicherverbrauch / Diskverbrauch
+# Trafic Auslastungen
+# Welche weitere Informationen würden sich noch lohnen zum Monitorin
+# Wie verpackt man die daten für den kunden / was muss auf das Dokument??
+# Prometheus quering (10.0.70.10:9090)
+# Pdf generator von wogra mit json verwenden
