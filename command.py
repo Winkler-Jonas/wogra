@@ -56,7 +56,7 @@ class POutput:
         self._stderr = ''.join(map(chr, stderr))
 
 
-url_hsa: str = 'https://r-n-d.informatik.hs-augsburg.de:8080/'
+url_hsa: str = 'https://r-n-d.informatik.hs-augsburg.de:880/'
 p_token_hsa: str = 'bsrg4w9xqTxotvxzVLGD'
 url_wogra: str = 'https://gitlab.wogra.com'
 p_token_wogra: str = 'Lq1z1hMxG_yKeyTLaAXD'
@@ -152,7 +152,7 @@ def git_run(cmd: List[str], cwd: Path = None) -> POutput:
     return POutput(*p_git.communicate())
 
 
-def run_function(repo_server: str, ssh_port: str, repo_dict: defaultdict[str, Dict[str, str]], author_name: str, time_frame: int = None):
+def run_function(repo_server: str, ssh_port: str, repo_lst: List[Repository], author_name: str, time_frame: int = None):
     """
     Function needed to build the whole process
 
@@ -170,8 +170,7 @@ def run_function(repo_server: str, ssh_port: str, repo_dict: defaultdict[str, Di
         repo_folder: Path = Path.cwd() / TMP_REPO_FOLDER
         add_ssh_keys(server_ip=repo_server, ssh_port=ssh_port)
         # Single-Core (10xslower) [dl_repo([key, value['repo_url']]) for key, value in repo_dict.items()]
-        pool.map(git_run, [['git', 'clone', f'{value["repo_url"]}', f'{str((repo_folder / key).resolve())}']
-                           for key, value in repo_dict.items()])
+        pool.map(git_run, [['git', 'clone', f'{repo.url}', f'{str((repo_folder / repo.repo_id).resolve())}'] for repo in repo_lst])
         for folder in repo_folder.iterdir():
             cmd_git_log: List[str] = ['git', 'log',
                                       '-i',
@@ -184,8 +183,10 @@ def run_function(repo_server: str, ssh_port: str, repo_dict: defaultdict[str, Di
     finally:
         prep_clean()
 
+
 def pretty_print(repo_action: List[Repository]):
     pass
+
 
 if __name__ == '__main__':
     time_frame: int = 3
