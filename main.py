@@ -14,7 +14,7 @@ logging_formatter = logging.Formatter(logging.BASIC_FORMAT)
 logging_handler.setFormatter(logging_formatter)
 
 root = logging.getLogger()
-root.setLevel(environ.get('LOGLEVEL', 'INFO'))
+root.setLevel(environ.get('LOGLEVEL', 'WARNING'))
 root.addHandler(logging_handler)
 
 
@@ -78,6 +78,8 @@ def __get_project_list(url: str, token: str) -> list:
     """
     Connect to GitLab and retrieve project information
 
+    :raises ConnectionError: In case url/credentials incorrect
+
     :param url: The GitLab Server url
     :type url: str
     :param token: Private Access Token from GitLab
@@ -88,9 +90,12 @@ def __get_project_list(url: str, token: str) -> list:
     with gitlab.Gitlab(url=url, private_token=token) as gl:
         try:
             return gl.projects.list(all=True)
-        except:
+        except ConnectionError as conn_err:
+            log.exception(f'Error! Sever: {url} not found')
+            raise conn_err
+        except gitlab.GitlabAuthenticationError:
             log.exception('Error! Cannot log in to Gitlab, please verify credentials')
-            raise
+            raise ConnectionError()
 
 
 def __get_project_info(proj_list: list, date_y_m_d: datetime) -> tuple[str, str, List[Repository]]:

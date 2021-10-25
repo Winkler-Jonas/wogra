@@ -2,14 +2,13 @@ import os
 import platform
 import regex as re
 import logging as log
+from typing import List
 from pathlib import Path
 import multiprocessing as mp
-from typing import Dict, List
 from repository import Repository
-from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from main import get_gitlab_info, convert_date
+from main import get_gitlab_info, convert_date, RegexException
 from subprocess import run, CalledProcessError, Popen, PIPE
 
 
@@ -56,13 +55,12 @@ class POutput:
         self._stderr = ''.join(map(chr, stderr))
 
 
-url_hsa: str = 'https://r-n-d.informatik.hs-augsburg.de:880/'
+url_hsa: str = 'https://r-n-d.informatik.hs-augsburg.de:8080/'
 p_token_hsa: str = 'bsrg4w9xqTxotvxzVLGD'
 url_wogra: str = 'https://gitlab.wogra.com'
 p_token_wogra: str = 'Lq1z1hMxG_yKeyTLaAXD'
 
 TMP_REPO_FOLDER: str = 'tmp_repo'
-log.basicConfig(filename='basic.log', level=log.WARNING)
 
 
 def prep_clean(directory: Path = Path.cwd() / TMP_REPO_FOLDER):
@@ -108,7 +106,8 @@ def add_ssh_keys(server_ip: str, ssh_port: str) -> bool:
         ssh_file: Path = Path.home() / '.ssh' / 'known_hosts' if \
             re.search('linux', platform.system(), re.I) else \
             Path.home() / '%USERPROFILE%' / '.ssh'
-        keyscan_output = run(['ssh-keyscan', '-H', f'-p {ssh_port}', '-t', 'rsa,ecdsa,ed25519', f'{server_ip}'], capture_output=True, text=True, check=True)
+        keyscan_cmd: List[str] = ['ssh-keyscan', '-H', f'-p {ssh_port}', '-t', 'rsa,ecdsa,ed25519', f'{server_ip}']
+        keyscan_output = run(keyscan_cmd, capture_output=True, text=True, check=True)
         ssh_fingerprint = re.search(r'stdout=\'(?P<fingerprint>.+?)\\n\'\,\sstderr=', str(keyscan_output), flags=re.S | re.M)
         with ssh_file.open(mode='w') as file:
             file.write(re.sub(r'(?P<false_line_sep>\\n)', os.linesep, ssh_fingerprint.group('fingerprint'), re.MULTILINE))
@@ -116,13 +115,13 @@ def add_ssh_keys(server_ip: str, ssh_port: str) -> bool:
     except CalledProcessError as ce:
         # ssh-keyscan could not be executed
         log.error('Error occurred while trying to get ssh-fingerprints')
-        raise ce
+        raise CommandException(f'Error occurred! Cannot execute command: {keyscan_cmd}')
     except FileNotFoundError as fe:
         # the file specifies was not found (not sure if windows actually works)
-        raise fe
+        raise AttributeError(f'Error occurred! File for trusted devices was not found')
     except AttributeError as at:
         # regex did not find output from subprocess
-        raise at
+        raise RegexException(-12, f'Error occurred! Cannot set Gitlab-Server as trusted device')
 
 
 # Done
