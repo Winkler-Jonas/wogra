@@ -1,5 +1,4 @@
 import os
-import sh
 import platform
 import regex as re
 import logging as log
@@ -125,16 +124,6 @@ def add_ssh_keys(server_ip: str, ssh_port: str) -> bool:
         raise at
 
 
-def dl_repo(repo_url: List[str]):
-    """
-    Download a repository to the defined folder
-
-    :param repo_url: The UID of the repository and its url
-    :type repo_url: List[str]
-    """
-    sh.git('clone', repo_url[1], Path.cwd() / TMP_REPO_FOLDER / repo_url[0])
-
-
 # Done
 def git_run(cmd: List[str], cwd: Path = None) -> POutput:
     """
@@ -191,22 +180,16 @@ def run_function(repo_server: str, ssh_port: str, repo_dict: defaultdict[str, Di
             git_log_out: POutput = git_run(cmd_git_log, cwd=folder)
             print(git_log_out)
             # todo read stderr from git_log_out POutput-Object
-
-    except sh.ErrorReturnCode as e:
-        # occurs when there is no commit fitting the provided filters
-        log.error(e.stderr)
-        print('not good')
-        raise e
     finally:
-        print('Done')
         prep_clean()
 
+def pretty_print(repo_action: List[])
 
 if __name__ == '__main__':
     time_frame: int = 3
-    user: str = 'Renovate Bot'
-    run_function(*get_gitlab_info(url=url_wogra,
-                                  private_token=p_token_wogra,
+    user: str = 'Hubert Hoegl'
+    run_function(*get_gitlab_info(url=url_hsa,
+                                  private_token=p_token_hsa,
                                   time_in_days=time_frame),
                  author_name=user,
                  time_frame=time_frame)
