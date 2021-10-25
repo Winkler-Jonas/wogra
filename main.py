@@ -1,10 +1,41 @@
 import gitlab
 import regex as re
-from typing import List, Dict, Callable, Tuple, Any
-from datetime import date, datetime, timedelta
+import logging as log
+import logging.handlers
+from pathlib import Path
+from typing import List, Any
+from os import linesep, environ
+from repository import Repository
 from collections import defaultdict
+from datetime import date, datetime, timedelta
 
-repo_pattern = re.compile(r"""
+logging_handler = logging.handlers.WatchedFileHandler(environ.get('LOGFILE', f'{Path.cwd() / "basic.log"}'))
+logging_formatter = logging.Formatter(logging.BASIC_FORMAT)
+logging_handler.setFormatter(logging_formatter)
+
+root = logging.getLogger()
+root.setLevel(environ.get('LOGLEVEL', 'INFO'))
+root.addHandler(logging_handler)
+
+class RegexException(Exception):
+    def __init__(self, errno: int, msg: str):
+        self._msg: str = msg
+        self._errno: int = errno
+        super(RegexException, self).__init__('msg: {}, errno: {}'.format(msg, errno))
+
+    def __reduce__(self):
+        return RegexException, (self._msg, self._errno)
+
+    @property
+    def msg(self) -> str:
+        return self._msg
+
+    @property
+    def errno(self) -> int:
+        return self._errno
+
+
+repo_pattern = re.compile("""
     id                              
     \W+                             # tag and value seperated by none 'norm' characters
         (?P<id>                    
@@ -26,6 +57,7 @@ repo_pattern = re.compile(r"""
 
 port_pattern = re.compile(r'(?=:(?P<port>\d+))', flags=re.M | re.S)
 server_pattern = re.compile(r'\@(?P<server>.*?)\:', flags=re.M | re.S)
+server_port_pattern = re.compile(r'\@(?P<server>.*)(?=:(?P<port>\d+))', flags=re.M | re.S)
 
 url_wogra: str = 'https://gitlab.wogra.com'
 p_token_wogra: str = 'Lq1z1hMxG_yKeyTLaAXD'
@@ -52,10 +84,13 @@ def __get_project_list(url: str, token: str) -> list:
             pass
 
 
-def __get_project_info(proj_list: list, date_y_m_d: date) -> tuple[str, str, defaultdict[Any, dict]]:
+def __get_project_info(proj_list: list, date_y_m_d: datetime) -> tuple[str, str, List[Repository]]:
     """
     Convert list of projects into strings and filter out
     projects that were not edited in the provided timeframe
+
+    :raises AttributeError: If input parameter corrupt (See log-file for error message)
+    :raises RegexException:
 
     :param date_y_m_d: The date the repository had to be edited the very least
     :type date_y_m_d: date
@@ -65,27 +100,44 @@ def __get_project_info(proj_list: list, date_y_m_d: date) -> tuple[str, str, def
     containing relevant information about the repo
     :rtype: tuple[str, str, defaultdict[Any, dict]]
     """
-    repository_dict: [Callable, dict] = defaultdict(lambda: dict())
-    for proj in proj_list:
-        try:
-            if (proj_string := str(proj)) and \
-                    (repo_info := repo_pattern.search(proj_string)) and \
-                    (repo_last_edit := repo_info.group('date')) and \
-                    datetime.strptime(f"{repo_last_edit}", "%Y-%m-%d") > date_y_m_d:
-                repo_id, repo_name, repo_url = repo_info.group('id', 'name', 'url')
-                repository_dict[repo_id] = {'repo_name': repo_name,
-                                            'repo_url': repo_url,
-                                            'repo_last_edit': repo_last_edit}
-            else:
-                # should raise exception due to empty repository
-                pass
-        except AttributeError as e:
-            # todo write exception if clause above should be removed
-            # Exception is thrown when regex group was not found ...
-            pass
-    return '' if not (s_tmp := server_pattern.search(repo_url)) else s_tmp.group('server'), \
-           '' if not (tmp := port_pattern.search(repo_url)) else tmp.group('port'), \
-           repository_dict
+    # confirm date
+    try:
+        datetime(year=date_y_m_d.year, month=date_y_m_d.month, day=date_y_m_d.day, hour=date_y_m_d.hour)
+        if not proj_list:
+            raise IndexError
+    except ValueError as val_err: # Date not allowed
+        log.error(f'Error occurred! Illegal timestamp: {date_y_m_d}')
+        raise AttributeError()
+    except IndexError as idx_err:
+        log.error(f'Error occurred! Provided gitlab-project-list empty')
+        raise AttributeError()
+
+    repository_lst: List[Repository] = []
+    try:
+        for repository_pattern_match in (repo_pattern.search(repo_str) for repo_str in proj_list):
+            repo_id, repo_name, repo_url, repo_date_str = repository_pattern_match.group('id', 'name', 'url', 'date')
+            if (repo_date := datetime.strptime(f'{repo_date_str}', '%Y-%m-d')) > date_y_m_d:
+                repository_lst.append(Repository(repo_id=repo_id,
+                                                 name=repo_name,
+                                                 url=repo_url,
+                                                 date_edited=repo_date))
+    except AttributeError as att_err:
+        err_msg: str = f'Error occurred grouping either id/name/url or date! Str-Dump: {linesep}{proj_list}{linesep}'
+        log.error(err_msg)
+        raise RegexException(-10, err_msg)
+    try:  # Server and port are port are in ssh_url_to_repo string
+        any_ssh_url: re.Match = server_port_pattern.search(repository_lst[-1].url)
+        server, port = any_ssh_url.group('server', 'port')
+    except AttributeError as any_err:
+        err_msg: str = f'Error occurred grouping either server or port! Str-Dump: {linesep}{repository_lst[-1].url}{linesep}'
+        log.error(err_msg)
+        raise RegexException(-10, err_msg)
+    except IndexError:
+        err_msg: str = f'Exception occurred! Provided string did not match any internal search pattern' \
+                       f'Please provided string containing ID/Name/URL..'
+        log.exception(err_msg)
+        exit(0)
+    return server, port, repository_lst
 
 
 def convert_date(time_in_days: int = None) -> datetime:
@@ -102,9 +154,9 @@ def convert_date(time_in_days: int = None) -> datetime:
     """
     today: str = date.today().strftime("%Y-%m-%d")
     if time_in_days:
-        date_y_m_d: date = datetime.strptime(f"{today}", "%Y-%m-%d") - timedelta(days=time_in_days)
+        date_y_m_d: datetime = datetime.strptime(f"{today}", "%Y-%m-%d") - timedelta(days=time_in_days)
     else:
-        date_y_m_d: date = datetime.strptime(f"{today[:-2]}01", "%Y-%m-%d")
+        date_y_m_d: datetime = datetime.strptime(f"{today[:-2]}01", "%Y-%m-%d")
     return date_y_m_d
 
 

@@ -5,9 +5,10 @@ import logging as log
 from pathlib import Path
 import multiprocessing as mp
 from typing import Dict, List
-from dataclasses import dataclass, field
+from repository import Repository
 from collections import defaultdict
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from main import get_gitlab_info, convert_date
 from subprocess import run, CalledProcessError, Popen, PIPE
 
@@ -183,7 +184,8 @@ def run_function(repo_server: str, ssh_port: str, repo_dict: defaultdict[str, Di
     finally:
         prep_clean()
 
-def pretty_print(repo_action: List[])
+def pretty_print(repo_action: List[Repository]):
+    pass
 
 if __name__ == '__main__':
     time_frame: int = 3
