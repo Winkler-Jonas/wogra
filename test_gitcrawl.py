@@ -1,0 +1,31 @@
+# Imports
+from global_logger import setup_logger
+logger = setup_logger('root')
+# from main import crawl_gitlab
+from repository import Repository
+from gitlap import Gitlab
+
+url_hsa: str = 'https://r-n-d.informatik.hs-augsburg.de:8080/'
+p_token_hsa: str = 'bsrg4w9xqTxotvxzVLGD'
+url_wogra: str = 'https://gitlab.wogra.com'
+p_token_wogra: str = 'Lq1z1hMxG_yKeyTLaAXD'
+
+
+if __name__ == '__main__':
+    try:
+        gitlab_obj: Gitlab = Gitlab(url_hsa, p_token_hsa)
+
+        for repo in gitlab_obj.get_repositories('Hubert Hoegl', 10):
+            print(repo)
+    except:
+        raise
+
+
+
+
+    # time_frame: int = 3
+    # user: str = 'Hubert Hoegl'
+    # # Datatype Tuple[server, port, RepositoryObjects]
+    # gitlab_info: tuple[str, str, list[Repository]] = crawl_gitlab(url=url_hsa,
+    #                                                               private_token=p_token_hsa,
+    #                                                               time_in_days=time_frame)

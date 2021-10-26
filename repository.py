@@ -34,3 +34,6 @@ class Repository:
     @commits.setter
     def commits(self, new_commit_lst: List[str]):
         self.__commits = new_commit_lst
+
+    def __str__(self) -> str:
+        return f"ID: {self.__repo_id}\tNAME: {self.__name}\tDATE_EDITED: {self.__date_edited}\tCOMMITS: {''.join(self.__commits)}"
