@@ -1,8 +1,8 @@
-from exceptions import RegexException, CommandException
 from subprocess import run, CalledProcessError, Popen, PIPE
+from exceptions import RegexException, CommandException
 from datetime import datetime, timedelta, date
-from typing import List, Union, Callable
 from repository import Repository
+from typing import List, Union
 from data_types import POutput
 import multiprocessing as mp
 from shutil import rmtree
@@ -134,6 +134,40 @@ class Gitlab:
     def port(self) -> str:
         return self.__port
 
+    def __add_ssh_keys(self) -> bool:
+        """
+        Add ssh_fingerprint to known Hosts file.
+        Designed to work on windows and linux
+
+        :raises CommandException: When ssh-keyscan command could not be executed
+        :raises AttributeError: hosts file was not found or couldn't be edited
+
+        :return: True if successful, else None
+        :rtype: bool
+        """
+        try:
+            ssh_file: Path = Path.home() / '.ssh' / 'known_hosts' if \
+                re.search('linux', platform.system(), re.I) else \
+                Path.home() / '%USERPROFILE%' / '.ssh'
+            keyscan_cmd: List[str] = ['ssh-keyscan', '-H', f'-p {self.__port}', '-t', 'rsa,ecdsa,ed25519', f'{self.__server_ip}']
+            keyscan_output = run(keyscan_cmd, capture_output=True, text=True, check=True)
+            ssh_fingerprint = re.search(r'stdout=\'(?P<fingerprint>.+?)\\n\'\,\sstderr=', str(keyscan_output),
+                                        flags=re.S | re.M)
+            with ssh_file.open(mode='w') as file:
+                file.write(
+                    re.sub(r'(?P<false_line_sep>\\n)', linesep, ssh_fingerprint.group('fingerprint'), re.MULTILINE))
+            return True
+        except CalledProcessError as ce:
+            # ssh-keyscan could not be executed
+            logger.error('Error occurred while trying to get ssh-fingerprints')
+            raise CommandException(-10, f'Error occurred! Cannot execute command: {keyscan_cmd}')
+        except FileNotFoundError:
+            # the file specified was not found (not sure if windows actually works)
+            raise AttributeError(f'Error occurred! File for trusted devices was not found')
+        except AttributeError:
+            # regex did not find output from subprocess
+            raise RegexException(-12, f'Error occurred! Cannot set Gitlab-Server as trusted device')
+
     def __get_project_list(self) -> list:
         """
         Connect to GitLab and retrieve project information
@@ -211,44 +245,6 @@ class Gitlab:
             logger.exception(exc_msg)
             exit(0)
         return repository_lst
-
-    def __add_ssh_keys(self) -> bool:
-        """
-        Add ssh_fingerprint to known Hosts file.
-        Designed to work on windows and linux
-
-        :raises CommandException: When ssh-keyscan command could not be executed
-        :raises AttributeError: hosts file was not found or couldn't be edited
-
-        :param server_ip: The ssh servers ip address
-        :type server_ip: str
-        :param ssh_port: The port the servers uses for ssh connection
-        :type ssh_port: str
-        :return: True if successful, else None
-        :rtype: bool
-        """
-        try:
-            ssh_file: Path = Path.home() / '.ssh' / 'known_hosts' if \
-                re.search('linux', platform.system(), re.I) else \
-                Path.home() / '%USERPROFILE%' / '.ssh'
-            keyscan_cmd: List[str] = ['ssh-keyscan', '-H', f'-p {self.__port}', '-t', 'rsa,ecdsa,ed25519', f'{self.__server_ip}']
-            keyscan_output = run(keyscan_cmd, capture_output=True, text=True, check=True)
-            ssh_fingerprint = re.search(r'stdout=\'(?P<fingerprint>.+?)\\n\'\,\sstderr=', str(keyscan_output),
-                                        flags=re.S | re.M)
-            with ssh_file.open(mode='w') as file:
-                file.write(
-                    re.sub(r'(?P<false_line_sep>\\n)', linesep, ssh_fingerprint.group('fingerprint'), re.MULTILINE))
-            return True
-        except CalledProcessError as ce:
-            # ssh-keyscan could not be executed
-            logger.error('Error occurred while trying to get ssh-fingerprints')
-            raise CommandException(-10, f'Error occurred! Cannot execute command: {keyscan_cmd}')
-        except FileNotFoundError:
-            # the file specified was not found (not sure if windows actually works)
-            raise AttributeError(f'Error occurred! File for trusted devices was not found')
-        except AttributeError:
-            # regex did not find output from subprocess
-            raise RegexException(-12, f'Error occurred! Cannot set Gitlab-Server as trusted device')
 
     def get_repositories(self, author_name: str, time_frame: Union[int, str] = None) -> List[Repository]:
         """

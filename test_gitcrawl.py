@@ -1,8 +1,6 @@
 # Imports
 from global_logger import setup_logger
 logger = setup_logger('root')
-# from main import crawl_gitlab
-from repository import Repository
 from gitlap import Gitlab
 
 url_hsa: str = 'https://r-n-d.informatik.hs-augsburg.de:8080/'
@@ -13,10 +11,12 @@ p_token_wogra: str = 'Lq1z1hMxG_yKeyTLaAXD'
 
 if __name__ == '__main__':
     try:
-        gitlab_obj: Gitlab = Gitlab(url_hsa, p_token_hsa)
+        gitlab_obj: Gitlab = Gitlab(url_wogra, p_token_wogra)
 
-        for repo in gitlab_obj.get_repositories('Hubert Hoegl', 10):
+        for repo in gitlab_obj.get_repositories('Renovate Bot', 10):
             print(repo)
+            for key, value in repo.get_pretty_commits():
+                print(f'{key}: Sicherheitsupdate wurde installiert. Neue version {value}')
     except:
         raise
 
