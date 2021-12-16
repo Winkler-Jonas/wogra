@@ -18,8 +18,8 @@ VDATE_PATTERN = re.compile("""
 
 class Repository:
 
-    def __init__(self, repo_id: str, name: str, url: str, date_edited: datetime):
-        self.__repo_id: str = repo_id
+    def __init__(self, id: str, name: str, url: str, date_edited: datetime):
+        self.__repo_id: str = id
         self.__url: str = url
         self.__name: str = name
         self.__date_edited: datetime = date_edited
