@@ -112,14 +112,7 @@ int main(void) {
 
     // free allocated
     stringArray_del(stringArray);
-    Py_CLEAR(pyList);
 
-    END_PYTHON_CODE
-    __python_code_end__(gil_state);
-    __python_des__();
-    if (error) {
-        error_del(error);
-    }
     return 0;
 }
 
