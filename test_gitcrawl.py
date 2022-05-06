@@ -4,9 +4,9 @@ logger = setup_logger('root')
 from gitlap import Gitlab
 
 url_hsa: str = 'https://r-n-d.informatik.hs-augsburg.de:8080/'
-p_token_hsa: str = 'bsrg4w9xqTxotvxzVLGD'
+p_token_hsa: str = ''
 url_wogra: str = 'https://gitlab.wogra.com'
-p_token_wogra: str = 'Lq1z1hMxG_yKeyTLaAXD'
+p_token_wogra: str = ''
 
 
 if __name__ == '__main__':
