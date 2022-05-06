@@ -15,9 +15,9 @@ import os
 import time
 
 url_hsa: str = 'https://r-n-d.informatik.hs-augsburg.de:8080/'
-p_token_hsa: str = 'bsrg4w9xqTxotvxzVLGD'
+p_token_hsa: str = ''
 url_wogra: str = 'https://gitlab.wogra.com'
-p_token_wogra: str = 'Lq1z1hMxG_yKeyTLaAXD'
+p_token_wogra: str = ''
 
 CPU_COUNT: int = mp.cpu_count()
 
